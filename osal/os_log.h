@@ -24,6 +24,8 @@
 #ifndef __OS_LOG_H__
 #define __OS_LOG_H__
 
+#include <stdarg.h>
+
 typedef void (*os_log_callback)(const char*, const char*, va_list);
 
 #ifdef __cplusplus

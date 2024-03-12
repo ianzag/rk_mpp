@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <syslog.h>
+#include <string.h>
 
 #include "os_log.h"
 #include "os_env.h"
@@ -36,64 +37,102 @@ public:
 };
 
 static SyslogWrapper syslog_wrapper;
+static FILE* log_fp = NULL;
 
 SyslogWrapper::SyslogWrapper()
 {
-    int option = LOG_PID | LOG_CONS;
-    RK_U32 syslog_perror = 0;
+    const char* log_type = NULL;
+    os_get_env_str("mpp_log_type", &log_type, "syslog");
+    if (strcmp(log_type, "stdout") == 0) {
+        log_fp = stdout;
+    } else if (strcmp(log_type, "stderr") == 0) {
+        log_fp = stderr;
+    } else {
+        log_fp = NULL;
+        int option = LOG_PID | LOG_CONS;
+        RK_U32 syslog_perror = 0;
 
-    os_get_env_u32("mpp_syslog_perror", &syslog_perror, 0);
-    if (syslog_perror)
-        option |= LOG_PERROR;
+        os_get_env_u32("mpp_syslog_perror", &syslog_perror, 0);
+        if (syslog_perror)
+            option |= LOG_PERROR;
 
-    openlog("mpp", option, LOG_USER);
+        openlog("mpp", option, LOG_USER);
+    }
 }
 
 SyslogWrapper::~SyslogWrapper()
 {
-    closelog();
+    if (log_fp) {
+        fflush(log_fp);
+    } else {
+        closelog();
+    }
 }
 
 void os_log_trace(const char* tag, const char* msg, va_list list)
 {
     char line[LINE_SZ] = {0};
     snprintf(line, sizeof(line) - 1, "%s: %s", tag, msg);
-    vsyslog(LOG_NOTICE, line, list);
+    if (log_fp) {
+        vfprintf(log_fp, line, list);
+    } else {
+        vsyslog(LOG_NOTICE, line, list);
+    }
 }
 
 void os_log_debug(const char* tag, const char* msg, va_list list)
 {
     char line[LINE_SZ] = {0};
     snprintf(line, sizeof(line) - 1, "%s: %s", tag, msg);
-    vsyslog(LOG_DEBUG, line, list);
+    if (log_fp) {
+        vfprintf(log_fp, line, list);
+    } else {
+        vsyslog(LOG_DEBUG, line, list);
+    }
 }
 
 void os_log_info(const char* tag, const char* msg, va_list list)
 {
     char line[LINE_SZ] = {0};
     snprintf(line, sizeof(line) - 1, "%s: %s", tag, msg);
-    vsyslog(LOG_INFO, line, list);
+    if (log_fp) {
+        vfprintf(log_fp, line, list);
+    } else {
+        vsyslog(LOG_INFO, line, list);
+    }
 }
 
 void os_log_warn(const char* tag, const char* msg, va_list list)
 {
     char line[LINE_SZ] = {0};
     snprintf(line, sizeof(line) - 1, "%s: %s", tag, msg);
-    vsyslog(LOG_WARNING, line, list);
+    if (log_fp) {
+        vfprintf(log_fp, line, list);
+    } else {
+        vsyslog(LOG_WARNING, line, list);
+    }
 }
 
 void os_log_error(const char* tag, const char* msg, va_list list)
 {
     char line[LINE_SZ] = {0};
     snprintf(line, sizeof(line) - 1, "%s: %s", tag, msg);
-    vsyslog(LOG_ERR, line, list);
+    if (log_fp) {
+        vfprintf(log_fp, line, list);
+    } else {
+        vsyslog(LOG_ERR, line, list);
+    }
 }
 
 void os_log_fatal(const char* tag, const char* msg, va_list list)
 {
     char line[LINE_SZ] = {0};
     snprintf(line, sizeof(line) - 1, "%s: %s", tag, msg);
-    vsyslog(LOG_CRIT, line, list);
+    if (log_fp) {
+        vfprintf(log_fp, line, list);
+    } else {
+        vsyslog(LOG_CRIT, line, list);
+    }
 }
 
 #endif
