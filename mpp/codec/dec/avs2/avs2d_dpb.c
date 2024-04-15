@@ -513,7 +513,8 @@ static Avs2dFrame_t *dpb_alloc_frame(Avs2dCtx_t *p_dec, HalDecTask *task)
         // fbc output frame update
         mpp_frame_set_offset_y(mframe, 8);
         ver_stride += 16;
-    }
+    } else if (MPP_FRAME_FMT_IS_TILE(p_dec->init.cfg->base.out_fmt))
+        mpp_frame_set_fmt(mframe, mpp_frame_get_fmt(mframe) | (p_dec->init.cfg->base.out_fmt & (MPP_FRAME_TILE_FLAG)));
 
     if (p_dec->is_hdr)
         mpp_frame_set_fmt(mframe, mpp_frame_get_fmt(mframe) | MPP_FRAME_HDR);
@@ -853,6 +854,6 @@ MPP_RET avs2d_dpb_flush(Avs2dCtx_t *p_dec)
     //!< reset dpb management
     dpb_init_management(mgr);
 
-    AVS2D_PARSE_TRACE("In.");
+    AVS2D_PARSE_TRACE("Out.");
     return ret;
 }

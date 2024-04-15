@@ -331,7 +331,6 @@ MPP_RET avs2d_reset_parser(Avs2dCtx_t *p_dec)
     p_dec->got_vsh      = 0;
     p_dec->got_exh      = 0;
     p_dec->got_keyframe = 0;
-    p_dec->vec_flag     = 0;
     p_dec->enable_wq    = 0;
     p_dec->new_frame_flag = 0;
     p_dec->new_seq_flag = 0;
@@ -398,6 +397,9 @@ MPP_RET avs2d_fill_parameters(Avs2dCtx_t *p_dec, Avs2dSyntax_t *syntax)
     pp->alpha_c_offset              = ph->alpha_c_offset;
     pp->beta_offset                 = ph->beta_offset;
 
+    //!< current poc
+    pp->cur_poc = ph->poi;
+
     //!< picture reference params
     refp->ref_pic_num = mgr->num_of_ref;
     memset(refp->ref_poc_list, -1, sizeof(refp->ref_poc_list));
@@ -409,7 +411,7 @@ MPP_RET avs2d_fill_parameters(Avs2dCtx_t *p_dec, Avs2dSyntax_t *syntax)
     alfp->enable_pic_alf_y  = ph->enable_pic_alf_y;
     alfp->enable_pic_alf_cb = ph->enable_pic_alf_cb;
     alfp->enable_pic_alf_cr = ph->enable_pic_alf_cr;
-    alfp->alf_filter_num_minus1 = ph->alf_filter_num - 1;
+    alfp->alf_filter_num_minus1 = (ph->alf_filter_num > 0) ? (ph->alf_filter_num - 1) : 0;
     memcpy(alfp->alf_coeff_idx_tab, ph->alf_coeff_idx_tab, sizeof(ph->alf_coeff_idx_tab));
     memcpy(alfp->alf_coeff_y, ph->alf_coeff_y, sizeof(ph->alf_coeff_y));
     memcpy(alfp->alf_coeff_cb, ph->alf_coeff_cb, sizeof(ph->alf_coeff_cb));
@@ -546,7 +548,7 @@ MPP_RET avs2d_parse_prepare_split(Avs2dCtx_t *p_dec, MppPacket *pkt, HalDecTask 
             p_curdata = p_end - remain + 1;
         }
 
-        if (p_dec->new_frame_flag || (p_dec->p_nals[p_dec->nal_cnt - 1].eof == 1)) {
+        if (p_dec->new_frame_flag || (p_dec->nal_cnt > 1 && p_dec->p_nals[p_dec->nal_cnt - 1].eof == 1)) {
             task->valid = 1;
             break;
         }
@@ -609,7 +611,9 @@ MPP_RET avs2d_parse_prepare_fast(Avs2dCtx_t *p_dec, MppPacket *pkt, HalDecTask *
         }
     }
 
-    mpp_packet_set_pos(pkt, p_curdata);
+    // sequence_end_code and video_edit_code at the end of a packet will be ignored.
+    mpp_packet_set_pos(pkt, p_end + 1);
+    AVS2D_PARSE_TRACE("after split, remain %d, task->valid %d\n", remain, task->valid);
 
     AVS2D_PARSE_TRACE("Out.");
     return ret;
@@ -624,7 +628,7 @@ MPP_RET avs2d_parse_stream(Avs2dCtx_t *p_dec, HalDecTask *task)
     for (i = 0 ; i < p_dec->nal_cnt; i++) {
         RK_U32 startcode = p_nalu->header;
 
-        AVS2D_PARSE_TRACE("start code 0x%08x\n", startcode);
+        AVS2D_PARSE_TRACE("start code[%d] 0x%08x\n", i, startcode);
         if (!AVS2_IS_SLICE_START_CODE(startcode)) {
             RK_U8 *data_ptr = p_dec->p_header->pbuf + p_nalu->data_pos;
             memset(&p_dec->bitctx, 0, sizeof(BitReadCtx_t));
@@ -653,14 +657,8 @@ MPP_RET avs2d_parse_stream(Avs2dCtx_t *p_dec, HalDecTask *task)
             ret = parse_extension_header(p_dec, &p_dec->bitctx);
             break;
         case AVS2_USER_DATA_START_CODE:
-            break;
         case AVS2_VIDEO_SEQUENCE_END_CODE:
-            p_dec->new_seq_flag = 0;
-            avs2d_dpb_flush(p_dec);
-            break;
         case AVS2_VIDEO_EDIT_CODE:
-            p_dec->vec_flag = 0;
-            avs2d_dpb_flush(p_dec);
             break;
         default:
             if (AVS2_IS_SLICE_START_CODE(startcode)) {

@@ -158,10 +158,10 @@ static MPP_RET vpu_api_set_enc_cfg(MppCtx mpp_ctx, MppApi *mpi, MppEncCfg enc_cf
     mpp_enc_cfg_set_s32(enc_cfg, "rc:bps_min", rc_mode ? bps * 15 / 16 : bps * 1 / 16);
     mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_in_flex", 0);
     mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_in_num", fps_in);
-    mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_in_denorm", 1);
+    mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_in_denom", 1);
     mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_out_flex", 0);
     mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_out_num", fps_out);
-    mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_out_denorm", 1);
+    mpp_enc_cfg_set_s32(enc_cfg, "rc:fps_out_denom", 1);
     mpp_enc_cfg_set_s32(enc_cfg, "rc:gop", gop);
 
     mpp_enc_cfg_set_s32(enc_cfg, "codec:type", coding);
@@ -523,7 +523,7 @@ RK_S32 VpuApiLegacy::flush(VpuCodecContext *ctx)
     return 0;
 }
 
-static void setup_VPU_FRAME_from_mpp_frame(VPU_FRAME *vframe, MppFrame mframe)
+static void setup_VPU_FRAME_from_mpp_frame(VpuCodecContext *ctx, VPU_FRAME *vframe, MppFrame mframe)
 {
     MppBuffer buf = mpp_frame_get_buffer(mframe);
     RK_U64 pts  = mpp_frame_get_pts(mframe);
@@ -537,6 +537,7 @@ static void setup_VPU_FRAME_from_mpp_frame(VPU_FRAME *vframe, MppFrame mframe)
     if (buf)
         mpp_buffer_inc_ref(buf);
 
+    vframe->CodingType = ctx->videoCoding;
     vframe->DisplayWidth = mpp_frame_get_width(mframe);
     vframe->DisplayHeight = mpp_frame_get_height(mframe);
     vframe->FrameWidth = mpp_frame_get_hor_stride(mframe);
@@ -879,7 +880,7 @@ RK_S32 VpuApiLegacy::decode(VpuCodecContext *ctx, VideoPacket_t *pkt, DecoderOut
                 aDecOut->size = sizeof(VPU_FRAME);
             }
 
-            setup_VPU_FRAME_from_mpp_frame(vframe, mframe);
+            setup_VPU_FRAME_from_mpp_frame(ctx, vframe, mframe);
 
             aDecOut->timeUs = mpp_frame_get_pts(mframe);
             frame_count++;
@@ -955,7 +956,7 @@ RK_S32 VpuApiLegacy::decode_sendstream(VideoPacket_t *pkt)
     return MPP_OK;
 }
 
-RK_S32 VpuApiLegacy::decode_getoutframe(DecoderOut_t *aDecOut)
+RK_S32 VpuApiLegacy::decode_getoutframe(VpuCodecContext *ctx, DecoderOut_t *aDecOut)
 {
     RK_S32 ret = 0;
     VPU_FRAME *vframe = NULL;
@@ -996,7 +997,7 @@ RK_S32 VpuApiLegacy::decode_getoutframe(DecoderOut_t *aDecOut)
             aDecOut->size = sizeof(VPU_FRAME);
         }
 
-        setup_VPU_FRAME_from_mpp_frame(vframe, mframe);
+        setup_VPU_FRAME_from_mpp_frame(ctx, vframe, mframe);
 
         aDecOut->timeUs = mpp_frame_get_pts(mframe);
         frame_count++;
@@ -1100,6 +1101,11 @@ RK_S32 VpuApiLegacy::encode(VpuCodecContext *ctx, EncInputStream_t *aEncInStrm, 
     default: {
         mpp_err("unsupport format 0x%x\n", format & MPP_FRAME_FMT_MASK);
     } break;
+    }
+    mpp_frame_set_fmt(frame, (MppFrameFormat)(format & MPP_FRAME_FMT_MASK));
+    if (aEncInStrm->nFlags) {
+        mpp_log_f("found eos\n");
+        mpp_frame_set_eos(frame, 1);
     }
 
     fd = aEncInStrm->bufPhyAddr;
@@ -1360,7 +1366,7 @@ RK_S32 VpuApiLegacy::encoder_sendframe(VpuCodecContext *ctx, EncInputStream_t *a
         mpp_err("unsupport format 0x%x\n", format & MPP_FRAME_FMT_MASK);
     } break;
     }
-
+    mpp_frame_set_fmt(frame, (MppFrameFormat)(format & MPP_FRAME_FMT_MASK));
     if (aEncInStrm->nFlags) {
         mpp_log_f("found eos true\n");
         mpp_frame_set_eos(frame, 1);

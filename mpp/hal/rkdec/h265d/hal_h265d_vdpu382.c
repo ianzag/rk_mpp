@@ -30,7 +30,6 @@
 #include "hal_h265d_com.h"
 #include "hal_h265d_vdpu382.h"
 #include "vdpu382_h265d.h"
-#include "rk_hdr_meta_com.h"
 
 /* #define dump */
 #ifdef dump
@@ -77,10 +76,10 @@ static const FilterdColBufRatio filterd_fbc_on[CTU][FMT] = {
 };
 
 static const FilterdColBufRatio filterd_fbc_off[CTU][FMT] = {
-    /* 400    420      422       444 */
-    {{0, 0}, {9, 31}, {12, 39}, {12, 39}}, //ctu 16
-    {{0, 0}, {9, 25}, {12, 33}, {12, 33}}, //ctu 32
-    {{0, 0}, {9, 21}, {12, 29}, {12, 29}}  //ctu 64
+    /* 400     420       422       444 */
+    {{0, 0}, {15, 5},  {20, 5},  {20, 5}},  //ctu 16
+    {{0, 0}, {15, 9},  {20, 9},  {20, 9}},  //ctu 32
+    {{0, 0}, {15, 16}, {20, 16}, {20, 16}}  //ctu 64
 };
 
 #define CABAC_TAB_ALIGEND_SIZE          (MPP_ALIGN(27456, SZ_4K))
@@ -555,7 +554,7 @@ static void h265d_refine_rcb_size(Vdpu382RcbInfo *rcb_info,
             RK_U32 a = filterd_fbc_off[ctu_idx][chroma_fmt_idc].a;
             RK_U32 b = filterd_fbc_off[ctu_idx][chroma_fmt_idc].b;
 
-            rcb_bits = height * (a * bit_depth + b + (bit_depth == 10 ? 192 * ctu_size >> 4 : 0));
+            rcb_bits = height * (a * bit_depth + b);
         }
     } else
         rcb_bits = 0;
@@ -782,9 +781,6 @@ static MPP_RET hal_h265d_vdpu382_gen_regs(void *hal,  HalTaskInfo *syn)
             hw_regs->common.reg019.uv_hor_virstride = stride_uv >> 4;
             hw_regs->common.reg020_y_virstride.y_virstride = virstrid_y >> 4;
         }
-
-        if (MPP_FRAME_FMT_IS_HDR(mpp_frame_get_fmt(mframe)) && reg_ctx->cfg->base.enable_hdr_meta)
-            fill_hdr_meta_to_frame(mframe, HDR_HEVC);
     }
     mpp_buf_slot_get_prop(reg_ctx->slots, dxva_cxt->pp.CurrPic.Index7Bits,
                           SLOT_BUFFER, &framebuf);

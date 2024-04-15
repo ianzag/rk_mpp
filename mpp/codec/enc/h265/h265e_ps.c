@@ -183,7 +183,7 @@ MPP_RET h265e_set_sps(H265eCtx *ctx, H265eSps *sps, H265eVps *vps)
     MppEncRefCfg ref_cfg = ctx->cfg->ref_cfg;
     MppEncH265VuiCfg *vui = &codec->vui;
     MppFrameFormat fmt = prep->format;
-    RK_S32 i_timebase_num = rc->fps_out_denorm;
+    RK_S32 i_timebase_num = rc->fps_out_denom;
     RK_S32 i_timebase_den = rc->fps_out_num;
     RK_U8  convertToBit[MAX_CU_SIZE + 1];
     RK_U32 maxCUDepth, minCUDepth, addCUDepth;
@@ -205,6 +205,9 @@ MPP_RET h265e_set_sps(H265eCtx *ctx, H265eSps *sps, H265eVps *vps)
     minCUDepth = (codec->max_cu_size >> (maxCUDepth - 1));
 
     tuQTMaxLog2Size = convertToBit[codec->max_cu_size] + 2 - 1;
+    if (mpp_get_soc_type() == ROCKCHIP_SOC_RK3576) {
+        tuQTMaxLog2Size = tuQTMaxLog2Size + 1;
+    }
 
     addCUDepth = 0;
     while ((RK_U32)(codec->max_cu_size >> maxCUDepth) > (1u << (tuQTMinLog2Size + addCUDepth))) {
@@ -398,7 +401,7 @@ MPP_RET h265e_set_pps(H265eCtx  *ctx, H265ePps *pps, H265eSps *sps)
 {
     MppEncH265Cfg *codec = &ctx->cfg->codec.h265;
     MppEncRcCfg *rc = &ctx->cfg->rc;
-    pps->m_bConstrainedIntraPred = 0;
+    pps->m_bConstrainedIntraPred = codec->const_intra_pred;
     pps->m_PPSId = 0;
     pps->m_SPSId = 0;
     pps->m_picInitQPMinus26 = 0;
@@ -456,11 +459,12 @@ MPP_RET h265e_set_pps(H265eCtx  *ctx, H265ePps *pps, H265eSps *sps)
     pps->m_nNumTileColumnsMinus1 = 0;
     pps->m_loopFilterAcrossTilesEnabledFlag = !codec->lpf_acs_tile_disable;
     {
-        const char *soc_name = mpp_get_soc_name();
+        RockchipSocType soc_type = mpp_get_soc_type();
+
         /* check tile support on rk3566 and rk3568 */
-        if (strstr(soc_name, "rk3566") || strstr(soc_name, "rk3568")) {
+        if (soc_type == ROCKCHIP_SOC_RK3566 || soc_type == ROCKCHIP_SOC_RK3568) {
             pps->m_nNumTileColumnsMinus1 = (sps->m_picWidthInLumaSamples - 1) / 1920 ;
-        } else if (strstr(soc_name, "rk3588")) {
+        } else if (soc_type == ROCKCHIP_SOC_RK3588) {
             if (sps->m_picWidthInLumaSamples > 8192) {
                 /* 4 tile for over 8k encoding */
                 pps->m_nNumTileColumnsMinus1 = 3;
